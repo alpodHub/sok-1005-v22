@@ -1,0 +1,46 @@
+---
+title: "Mappeoppgave 2 - SOK-1005"
+author: "Kandidatnr.: 72"
+date: "03 02 2022"
+output: pdf_document
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(jsonlite)
+library(ggplot2)
+library(ggrepel)
+options(scipen=999)
+```
+
+```{r, warning=FALSE, message=FALSE}
+df <- fromJSON("https://static01.nyt.com/newsgraphics/2021/12/20/us-coronavirus-deaths-2021/ff0adde21623e111d8ce103fedecf7ffc7906264/scatter.json", flatten=TRUE)
+
+ggplot(df, aes(x=fully_vaccinated_pct_of_pop, y=deaths_per_100k)) + 
+  geom_point(size=3, shape=21, alpha=0.8, fill = "lightgreen", color = "black") +
+  theme_minimal() +
+  scale_x_continuous(breaks = seq(0.45, 0.80, 0.05), limits=c(0.45, 0.8)) + 
+  scale_y_continuous(breaks = seq(0, 20, 5), limits=c(0, 20)) +
+  labs(title = "Covid-19 deaths since universal adult vaccine eligibility compared with \n
+                                            vaccination rates", 
+       subtitle = "Avg monthly deaths per 100 000",
+       x = "Share of population fully vaccinated", y = " ") +
+  theme(plot.title = element_text(size=10, face="bold"), 
+        plot.subtitle = element_text(size=8),
+        axis.text.x=element_text(size=rel(1.0)),
+        text = element_text(size=8)) + 
+  annotate("text", x=0.61, y=17.5, size=2.5, 
+           label="Lower vaccination rate,\nhigher death rate") +
+  annotate("segment", x=0.567, xend = 0.55, y = 18, yend = 19, 
+           colour = "black", size=0.5, arrow = arrow(length = unit(.2,"cm"))) +
+  annotate("text", x=0.72, y=10, size=2.5, 
+         label="Higher vaccination rate,\nlower death rate") +
+  annotate("segment", x=0.75, xend = 0.77, y = 9, yend = 8, 
+           colour = "black", size=0.5, arrow = arrow(length = unit(.2,"cm"))) +
+  geom_text_repel(aes(label = geoid), max.overlaps = Inf, size = 2.5) + 
+  geom_smooth(method = 'lm')
+
+coef(lm(df$deaths_per_100k ~ df$fully_vaccinated_pct_of_pop))[2]
+
+```
+
+Det er forventet at en 100pst.p. økning i andel fullvaksinerte vil føre til en reduksjon i antall dødsfall per 100 000 innbyggere på 36.66, alt annet likt. 
