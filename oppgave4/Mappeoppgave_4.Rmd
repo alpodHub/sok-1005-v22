@@ -1,0 +1,37 @@
+---
+title: "Mappeoppgave 4 - SOK-1005"
+author: "Kandidatnr.: 72"
+date: "23 02 2022"
+output: pdf_document
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(rvest)
+library(tidyverse)
+library(rlist)
+```
+
+```{r, warning=FALSE, message=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=60)}
+scrape <- function(url) {
+  page <- read_html(url)
+  table <- html_nodes(page, 'table') 
+  table <- html_table(table, fill=TRUE) 
+  dframe <- list.stack(table) # stack the list into a data frame
+  colnames(dframe) <- dframe[1,]
+  dframe <- dframe %>% filter(!Dato=="Dato")
+  dframe <- dframe %>% separate(Dato, 
+                                into = c("Dag", "Dato"), 
+                                sep = "(?<=[A-Za-z])(?=[0-9])")
+  dframe <- dframe[-length(dframe$Dag),]
+  dframe$Dato <- as.Date(dframe$Dato, format="%d.%m.%Y")
+  dframe$Uke <- strftime(dframe$Dato, format = "%V")
+  dframe <- dframe %>% select(Dag,Dato,Uke,Tid,Rom)
+  return(dframe)
+}
+
+url_list <- 
+  list("https://timeplan.uit.no/emne_timeplan.php?sem=22v&module%5B%5D=SOK-1005-1&week=1-20&View=list","https://timeplan.uit.no/emne_timeplan.php?sem=22v&module%5B%5D=SOK-1006-1&week=1-20&View=list","https://timeplan.uit.no/emne_timeplan.php?sem=22v&module%5B%5D=SOK-1016-1&week=1-20&View=list")
+
+map(url_list, scrape)
+```
+
