@@ -1,0 +1,282 @@
+---
+title: "Prosjektoppgave - SOK-1005"
+author: "Kandidatnr.: 72 "
+date: "05 06 2022"
+output: pdf_document
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(readr)
+library(lubridate)
+```
+Oppgave 1           
+                  
+Jeg slår sammen de 6 datasettene til ett stort datasett ved hjelp av funksjoner union og merge.
+
+```{r, warning=FALSE, message=FALSE}
+df1 <- read_csv("C:/Users/mgmal/Desktop/Prosjekt/AppWichStoreAttributes.csv")
+df2 <- read_csv("C:/Users/mgmal/Desktop/Prosjekt/county_crime.csv")
+df3 <- read_csv("C:/Users/mgmal/Desktop/Prosjekt/county_demographic.csv")
+df4 <- read_csv("C:/Users/mgmal/Desktop/Prosjekt/county_employment.csv")
+df5 <- read_csv("C:/Users/mgmal/Desktop/Prosjekt/weekly_sales_10stores.csv")
+df6 <- read_csv("C:/Users/mgmal/Desktop/Prosjekt/weekly_weather.csv")
+
+# str(df1) # [10 x 14]
+# str(df2) # [6 x 12]
+# str(df3) # [6 x 14]
+# str(df4) # [6 x 5]
+# str(df5) # [79,459 x 17] # weekly_sales er det største datasettet
+# str(df6) # [270 x 16]
+
+df1 <- rename(df1, County_Name = Store_County)
+df1 <- rename(df1, Store_num = Store_Num)
+join1 <- merge(df5, df1) # 79459 obs 30 variables
+join2 <- merge(join1, df2) # 79459 obs 41 variables
+join3 <- merge(join2, df3) # 79459 obs 54 variables
+join4 <- merge(join3, df4) # 79459 obs 58 variables
+df6 <- rename(df6, Store_Weather_Station = Weather_Station)
+final_df <- union_all(join4, df6) 
+final_df$Date <- mdy(final_df$Date)
+final_df <- final_df %>% filter(!is.na(Description))
+# str(final_df) # 79459 obs of 73 variables
+```
+
+Det endelige datasettet final_df inneholder 79,459 rader/observasjoner og 73 kolonner/variabler. Datasettet weekly_sales (df5) var det største datasettet og inneholdt 79,459 rader og 17 kolonner. Det ser ut til at sammenslåingen har latt seg gjennomføre. Jeg sammenligner for ordens skyld noen sentrale variabler:
+
+\newpage
+```{r, warning=FALSE, message=FALSE}
+# Sammenligner min final_df med det originale weekly_sales datasettet:
+sum(df5$Profit)
+sum(final_df$Profit, na.rm=T)
+
+# 502 forskjellige varer/produkter:
+count(unique(final_df[c("Description")]))   
+count(unique(df5[c("Description")]))
+```
+Alt ser ut til å være OK og jeg går videre med min analyse.
+
+\newpage
+Oppgave 2         
+             
+En ukentlig salgsrapport kan eksempelvis inneholde følgende elementer:
+```{r, warning=FALSE, message=FALSE}
+# Funksjonen filter(Date=="2012-04-01") henter ut data for perioden 2012-04-01 tom 2012-04-07.
+# Altså for hele uken.
+# Funksjonen filter(Date=="2012-04-08") henter ut data for perioden 2012-04-08 tom 2012-04-14.
+
+# De mest lønnsomme produktene, utsalgssted 2, periode 2012-04-01 tom 2012-04-07 (1 uke)
+final_df %>% filter(Date=="2012-04-01") %>% 
+  filter(Store_num==2) %>% 
+  group_by(Description) %>%
+  summarise(Profit = sum(Profit)) %>%
+  arrange(desc(Profit))
+
+# De minst lønnsomme produktene
+# Kan evt. ekskludere produkter som inneholder ordene "free" og "reward"
+final_df %>% filter(Date=="2012-04-01") %>% 
+  filter(Store_num==2) %>%  
+  group_by(Description) %>%
+  summarise(Profit = sum(Profit)) %>%
+  arrange(Profit)
+
+# De mest solgte produktene
+head(final_df %>% filter(Date=="2012-04-01") %>% 
+  group_by(Description) %>%
+  summarise(Sold = sum(Sold)) %>%
+  arrange(desc(Sold)),3)
+
+# Produktbeskrivelse og profitt for en spesifikk dato 
+store_2 <- final_df %>% select(Description,Profit,Date,Store_num) %>% 
+       filter(Date=="2012-04-01",Store_num==2)
+head(store_2)
+```
+
+Nøyaktig samme prosedyre kan brukes for andre variabler som f.eks kostnad, margin, pris, osv.
+
+Slik innsikt kan være nyttig hvis selskapet ønsker å (for eksempel) fokusere på de mest lønnsomme produktene, kutte i varesortimentet, kutte kostnader eller se potensiale i andre, mindre populære produkter. 
+
+Datasattet inneholder 502 forskjellige produkter, men noen produkter ligner på hverandre og kan grupperes sammen. Eksempelvis kan alle produkter som inneholder ordet "pizza" i produktbeskrivelsen grupperes i en kategori/variabel, og alle produkter som inneholder "burger" grupperes i en annen. På denne måten kan en se hvordan de ulike produktkategoriene "rangerer" i forhold til hverandre. 
+
+```{r, warning=FALSE, message=FALSE}
+# Binning
+pizza <- final_df %>% filter(grepl('PIZZA', Description)) %>% 
+  select(Description,Profit,Date,Day,Store_num) %>%  
+  mutate(Description = ifelse(grepl('PIZZA', Description), 'Pizza')) 
+
+burger <- final_df %>% filter(grepl('BURGER', Description)) %>% 
+  select(Description,Profit,Date,Day,Store_num) %>%  
+  mutate(Description = ifelse(grepl('BURGER', Description), 'Burger'))
+
+soup <- final_df %>% filter(grepl('SOUP', Description)) %>% 
+  select(Description,Profit,Date,Day,Store_num) %>%  
+  mutate(Description = ifelse(grepl('SOUP', Description), 'Soup'))
+
+```
+\newpage
+```{r, warning=FALSE, message=FALSE}
+df_barplot2 <- bind_rows(pizza, burger, soup)
+df_barplot2 <- df_barplot2 %>% filter(Date=="2012-04-01")
+df_barplot2 <- setNames(aggregate(df_barplot2$Profit, by=list(Varekategori=df_barplot2$Description), 
+                                  FUN=sum),c("Varekategori", "Profitt"))
+ggplot(df_barplot2, aes(x=Varekategori, y=Profitt, fill=Varekategori)) + geom_bar(stat="identity") + 
+  theme_minimal() + labs(title = "Profitt per varekategori, 1 uke")
+```
+\newpage
+For perioden 2012-04-01 til og med 2012-04-07 er kolonnen "dag" lik 1 for hele uken, noe som gjør det umulig å analysere endringer fra dag til dag for en spesifikk uke. Det hadde vært interessant å se hvordan salg og profitt utvikler seg over tid (varierer med ukedager), men dette er altså ikke mulig på grunn av måten dataene er organisert/formatert på. Når er det best å markedsføre våre produkter? Selskapet som eier dataene bør se om de kan skaffe oss denne typen informasjon hvis denne typen analyse er av interesse. 
+
+Det hadde også vært interessant å se på hvilke produkter blir solgt sammen med andre produkter og hvilke produktkombinasjoner er de mest populære, Gitt denne kunnskapen, kan selskapet forsøke å "bundle" disse produktene for å oppnå større profitt. Relaterte og mindre populære produkter kan ha et stort potensiale for selskapet når man bruker denne typen kryssalg. Det viser seg at variabelen INV_NUMBER inneholder 1 vare per faktura og dette ser ut til å være standarden. Datasettet kan være ukomplett og oppdragsgiveren bør fremlegge et alternativt datasett, hvis så er tilfellet. Samtidig er det ikke utelukket at feilen ligger hos analytikeren og at datasettet ikke var undersøkt grundig nok. Oppdragsgiveren bør kontaktes for å få oppklart dette. 
+
+```{r, warning=FALSE, message=FALSE}
+# unique(final_df[c("INV_NUMBER")]) # Alle fakturaer
+# unique(final_df %>% filter(INV_NUMBER==40074) %>% select(Description))
+# unique(final_df %>% filter(INV_NUMBER==11064) %>% select(Description))
+# unique(final_df %>% filter(INV_NUMBER==7134) %>% select(Description))
+# unique(final_df %>% filter(INV_NUMBER==14825) %>% select(Description))
+# unique(final_df %>% filter(INV_NUMBER==4096) %>% select(Description))
+# unique(final_df %>% filter(INV_NUMBER==1909) %>% select(Description))
+# unique(final_df %>% filter(INV_NUMBER==4114) %>% select(Description))
+# unique(final_df %>% filter(INV_NUMBER==35019) %>% select(Description))
+# unique(final_df %>% filter(INV_NUMBER==3642) %>% select(Description))
+unique(final_df %>% filter(INV_NUMBER==14391) %>% select(Description))
+
+```
+
+Oppgave 3         
+             
+En månedlig salgsrapport på aggregert nivå kan inneholde følgende:
+```{r, warning=FALSE, message=FALSE}
+# Utsalgssteder med mest og minst profitt, Mai måned, 2012:
+final_df %>% filter(Year==2012) %>% 
+  filter(Month==5) %>% 
+  group_by(Store_num) %>%
+  summarise(Profit = sum(Profit)) %>%
+  arrange(desc(Profit))
+
+# De mest lønnsomme produktene:
+final_df %>% filter(Year==2012) %>% 
+  filter(Month==5) %>% 
+  group_by(Description) %>%
+  summarise(Profit = sum(Profit)) %>%
+  arrange(desc(Profit))
+
+# De minst lønnsomme produktene:
+final_df %>% filter(Year==2012) %>% 
+  filter(Month==5) %>% 
+  group_by(Description) %>%
+  summarise(Profit = sum(Profit)) %>%
+  arrange(Profit)
+```
+\newpage
+```{r, warning=FALSE, message=FALSE}
+# De mest solgte produktene:
+final_df %>% filter(Year==2012) %>% 
+  filter(Month==5) %>%  
+  group_by(Description) %>%
+  summarise(Sold = sum(Sold)) %>%
+  arrange(desc(Sold))
+```
+\newpage
+Vi kan se på utviklingen av diverse variabler over tid. For eksempel, for profitt:
+
+```{r, warning=FALSE, message=FALSE}
+# Tidsserieanalyse av profitt for mai måned, 2012:
+oppg3plot1 <- final_df %>% filter(Year==2012) %>% filter(Month==5)
+unique(oppg3plot1[c("Date")]) # 4 uker
+oppg3plot1 <- aggregate(oppg3plot1$Profit, by=list(Dato=oppg3plot1$Date), FUN=sum)
+oppg3plot1  <- rename(oppg3plot1, Profitt = x) 
+# Jeg kunne ha forandret variabelnavnene i final_df i stedet for å slippe å gjøre det flere ganger
+ggplot(oppg3plot1, aes(x = Dato, y = Profitt)) + theme_minimal() +
+  geom_line(aes(), size = 1) + 
+  labs(title = "Tidsserieanalyse av profitt for mai måned, 2012")
+```
+\newpage
+```{r, warning=FALSE, message=FALSE}
+# Tidsserieanalyse av profitt for mai måned, 2012 for utsalgssted 3:
+oppg3plot2 <- final_df %>% filter(Year==2012) %>% filter(Month==5) %>% filter(Store_num==5)
+unique(oppg3plot2[c("Date")]) # 4 uker
+oppg3plot2 <- aggregate(oppg3plot2$Profit, by=list(Dato=oppg3plot2$Date), FUN=sum)
+oppg3plot2  <- rename(oppg3plot2, Profitt = x)
+ggplot(oppg3plot2, aes(x = Dato, y = Profitt)) + theme_minimal() +
+  geom_line(aes(), size = 1) + 
+  labs(title = "Tidsserieanalyse av profitt for mai måned 2012 for utsalgssted 3")
+```
+\newpage
+Vi kan lage prognoser for neste måned ved hjelp av regresjonsanalyse (justert for sesongvariasjoner). Datasettet inneholder mange variabler som kan brukes som uavhengige variabler i predikasjon av f.eks profitt. Dette kan være variabler som Month, Store_Name samt temperaturdata og supplerende makroøkonomisk data. 
+
+```{r, warning=FALSE, message=FALSE}
+lm1 <- lm(final_df$Profit ~ final_df$Month + final_df$Store_num)
+summary(lm1)
+```
+
+Betakoeffisientene fra en regresjonsmodell kan brukes for å predikere fremtidig utvikling i en avhengig variabel. Dette var bare et enkelt eksempel for å illustrere potensialet av predikativ regresjonsanalyse. Med en veldig lav R^2 verdi er akkurat denne modellen ikke særlig godt egnet for prediksjoner og prognoser. 
+\newpage
+Flere forslag og ideer:
+
+```{r, warning=FALSE, message=FALSE}
+# Tidsserieanalyse, dato og profitt, utvikling over lang tid
+# En ser at kategorien "soup" har hatt en positiv utvikling den siste tid. 
+# Har produktet blitt mer populært? Har kostnadene sunket? Bør de satse mer på det?
+df_barplot6 <- bind_rows(pizza, burger, soup)
+df_barplot6  <- rename(df_barplot6, Dato = Date)
+df_barplot6  <- rename(df_barplot6, Profitt = Profit)
+df_barplot6  <- rename(df_barplot6, Varekategori = Description)
+ggplot(df_barplot6, aes(x = Dato, y = Profitt)) + 
+  geom_line(aes(color = Varekategori), size = 1) +
+  scale_color_manual(values = c("#00AFBB", "#E7B800", 'red')) +
+  theme_minimal() + labs(title = "Profitt per varekategori over lang tid")
+```
+\newpage
+
+```{r, warning=FALSE, message=FALSE}
+# Best day for sales
+# Konsernet tjener mest profitt på søndager
+# y-labelen kunne ha vært i enheter av hundre tusen 
+# Grafen kunne vært penere. De syv ukedagene kunne hatt hver sin farge i diagrammet.
+require(scales)
+df_barplot3 <- setNames(aggregate(final_df$Profit, by=list(Dag=final_df$Day),
+                                  FUN=sum),c("Dag", "Profitt"))
+ggplot(df_barplot3, aes(x=Dag, y=Profitt)) + geom_bar(stat="identity") +
+  scale_x_continuous("Dag", labels = as.character(1:30), breaks = 1:30) +
+  labs(title = "Profitt per dag. Dag 1: fredag") + theme_minimal() +
+  scale_y_continuous(labels = comma)
+
+```
+\newpage
+```{r, warning=FALSE, message=FALSE}
+# Best store
+df_barplot4 <- setNames(aggregate(final_df$Profit, by=list(Utsalgssted=final_df$Store_num), 
+                         FUN=sum),c("Utsalgssted", "Profitt"))
+ggplot(df_barplot4, aes(x=Utsalgssted, y=Profitt)) + 
+  geom_col(width = 1, position = "dodge") +
+  scale_x_continuous("Utsalgssted", labels = as.character(1:24), breaks = 1:24) +
+  labs(title = "Profitt for hvert utsalgssted") +
+  theme_minimal() + scale_y_continuous(labels = comma)
+```
+\newpage
+```{r, warning=FALSE, message=FALSE}
+# Best month:
+df_barplot5 <- setNames(aggregate(final_df$Profit, by=list(Category=final_df$Month)
+                                  ,FUN=sum),c("Måned", "Profitt"))
+ggplot(df_barplot5, aes(x=Måned, y=Profitt)) + geom_bar(stat="identity") +
+  scale_x_continuous("Måned", labels = as.character(1:12), breaks = 1:12) +
+  labs(title = "Profitt per måned") + theme_minimal() +
+  scale_y_continuous(labels = comma)
+```
+\newpage
+
+Oppgave 4         
+             
+Dataene kan benyttes til å planlegge nye utsalg og dersom konsernledelsen ønsker å etablere et nytt utsalg, kan de benytte disse dataene til å finne den beste lokasjonen. Ettersom utsalgssted #2 er det mest populære utsalgsstedet, kan det være lurt å etablere en ny butikk i Free Standing, Power City.
+Nytten av dette må ses i sammenheng med konkurransen i området, kostnader forbundet med etablering og kanskje til og med kriminalitetsstatistikken. Dette kan være variabler som Store_Competition_Fastfood, Store_Competition_Otherfood, Annual_Rent_Estimate, Cost og County_Total_Crimes. 
+
+```{r, warning=FALSE, message=FALSE}
+final_df %>%
+  group_by(Store_num) %>%
+  summarise(Profit = sum(Profit)) %>%
+  arrange(desc(Profit))
+
+head(final_df %>% filter(Store_num==2) %>% select(Store_num, Store_City, Store_Location),1)
+
+```
+
